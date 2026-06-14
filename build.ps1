@@ -111,8 +111,8 @@ for ($j = 0; $j -lt $nG; $j++) {
     }
     $sorted = @($counts.GetEnumerator() | Sort-Object -Property Value -Descending)
     $maxp = if ($sorted.Count) { [double]$sorted[0].Value / [math]::Max($total,1) * 100 } else { 100 }
-    $date = ''
-    if ($c.kickoff) { try { $dt=[datetimeoffset]::Parse($c.kickoff).UtcDateTime; $date = "{0} {1} {2}, {3:00}:{4:00} UTC" -f $dt.Day,$months[$dt.Month-1],$dt.Year,$dt.Hour,$dt.Minute } catch {} }
+    $date = ''; $gtop = "G$($j+1)"
+    if ($c.kickoff) { try { $pa=[datetimeoffset]::Parse($c.kickoff).UtcDateTime.AddHours(-5); $date = "{0} {1} {2}, {3:00}:{4:00} (Panam&aacute;)" -f $pa.Day,$months[$pa.Month-1],$pa.Year,$pa.Hour,$pa.Minute; $gtop = "{0} {1} {2:00}:{3:00}" -f $pa.Day,$months[$pa.Month-1],$pa.Hour,$pa.Minute } catch {} }
     $resBadge = if ($c.played) { "<span class='badge bres'>Resultado $(Esc $c.actual)</span>" } else { "<span class='badge bpend'>Por jugar</span>" }
     $youBadge = if ($mine) { "<span class='badge byou'>Tu pick $(Esc $mine)</span>" } else { "" }
     $resTxt = if ($c.played) { Esc $c.actual } else { 'Por jugar' }
@@ -135,7 +135,7 @@ for ($j = 0; $j -lt $nG; $j++) {
     $imgA = if ($af) { "<img src='$af' alt=''>" } else { '' }
     $sfH = if ($hf) { "<img class='sflag' src='$hf' alt=''>" } else { '' }
     $sfA = if ($af) { "<img class='sflag' src='$af' alt=''>" } else { '' }
-    [void]$sb.Append("<details class='game' name='games'><summary><div class='ghead'><span class='gid'>G$($j+1)</span></div><div class='gmatch'>$sfH<span class='gm'>$hc</span><span class='gvs'>-</span><span class='gm'>$ac</span>$sfA</div><div class='gres$resCls'>$resTxt</div>$pickHtml</summary><div class='body'><div class='match'>$imgH<span>$hc</span><span class='vs'>vs</span><span>$ac</span>$imgA</div><div class='meta'>$resBadge$youBadge<span class='mdate'>$date</span><span class='mtot'>$total predicciones</span></div><div class='dist'>$($bars.ToString())</div></div></details>")
+    [void]$sb.Append("<details class='game' name='games'><summary><div class='ghead'><span class='gid'>$gtop</span></div><div class='gmatch'>$sfH<span class='gm'>$hc</span><span class='gvs'>-</span><span class='gm'>$ac</span>$sfA</div><div class='gres$resCls'>$resTxt</div>$pickHtml</summary><div class='body'><div class='match'>$imgH<span>$hc</span><span class='vs'>vs</span><span>$ac</span>$imgA</div><div class='meta'>$resBadge$youBadge<span class='mdate'>$date</span><span class='mtot'>$total predicciones</span></div><div class='dist'>$($bars.ToString())</div></div></details>")
 }
 
 # ---- Champion + knockout-bracket prediction distributions ----
