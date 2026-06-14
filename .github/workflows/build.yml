@@ -2,7 +2,7 @@ name: Build Polla dashboard
 
 on:
   schedule:
-    - cron: '0 */4 * * *'      # every 4 hours (UTC). Adjust as you like.
+    - cron: '0 */2 * * *'      # every 2 hours (UTC). Adjust as you like.
   workflow_dispatch: {}          # lets you run it manually from the Actions tab
 
 permissions:
