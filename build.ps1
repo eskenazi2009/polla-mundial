@@ -115,8 +115,11 @@ for ($j = 0; $j -lt $nG; $j++) {
     if ($c.kickoff) { try { $dt=[datetimeoffset]::Parse($c.kickoff).UtcDateTime; $date = "{0} {1} {2}, {3:00}:{4:00} UTC" -f $dt.Day,$months[$dt.Month-1],$dt.Year,$dt.Hour,$dt.Minute } catch {} }
     $resBadge = if ($c.played) { "<span class='badge bres'>Resultado $(Esc $c.actual)</span>" } else { "<span class='badge bpend'>Por jugar</span>" }
     $youBadge = if ($mine) { "<span class='badge byou'>Tu pick $(Esc $mine)</span>" } else { "" }
-    $sumRes = if ($c.played) { "<span class='chip cres'>$(Esc $c.actual)</span>" } else { "<span class='chip cpend'>--</span>" }
-    $sumYou = if ($mine) { "<span class='chip cyou'>T&uacute;: $(Esc $mine)</span>" } else { "" }
+    $resTxt = if ($c.played) { Esc $c.actual } else { 'Por jugar' }
+    $resCls = if ($c.played) { '' } else { ' pend' }
+    $pickCls = 'pend'
+    if ($c.played -and $mine -ne '') { $pickCls = if ($mine -eq $c.actual) { 'win' } else { 'lose' } }
+    $pickHtml = if ($mine) { "<div class='gpick $pickCls'>T&uacute;: $(Esc $mine)</div>" } else { "<div class='gpick pend'>T&uacute;: -</div>" }
     $bars = New-Object System.Text.StringBuilder
     foreach ($kv in $sorted) {
         $sc = $kv.Key; $n = $kv.Value; $pct = [math]::Round(100.0*$n/[math]::Max($total,1),1)
@@ -128,10 +131,9 @@ for ($j = 0; $j -lt $nG; $j++) {
         if ($isMine) { $tags += "<span class='tg m'>T&Uacute;</span>" }
         [void]$bars.Append("<div class='$cls'><div class='barfill' style='width:$([math]::Round($w,1))%'></div><span class='score'>$(Esc $sc)</span><span class='tags'>$tags</span><span class='pct'>$pct%</span><span class='cnt'>$n pers.</span></div>")
     }
-    $openAttr = if ($j -eq 0) { ' open' } else { '' }
     $imgH = if ($hf) { "<img src='$hf' alt=''>" } else { '' }
     $imgA = if ($af) { "<img src='$af' alt=''>" } else { '' }
-    [void]$sb.Append("<details class='game'$openAttr><summary><span class='gid'>G$($j+1)</span><span class='gm'>$hc-$ac</span>$sumRes$sumYou</summary><div class='body'><div class='match'>$imgH<span>$hc</span><span class='vs'>vs</span><span>$ac</span>$imgA</div><div class='meta'>$resBadge$youBadge<span class='mdate'>$date</span><span class='mtot'>$total predicciones</span></div><div class='dist'>$($bars.ToString())</div></div></details>")
+    [void]$sb.Append("<details class='game'><summary><div class='ghead'><span class='gid'>G$($j+1)</span><span class='gm'>$hc-$ac</span></div><div class='gres$resCls'>$resTxt</div>$pickHtml</summary><div class='body'><div class='match'>$imgH<span>$hc</span><span class='vs'>vs</span><span>$ac</span>$imgA</div><div class='meta'>$resBadge$youBadge<span class='mdate'>$date</span><span class='mtot'>$total predicciones</span></div><div class='dist'>$($bars.ToString())</div></div></details>")
 }
 
 # ---- Champion + knockout-bracket prediction distributions ----
@@ -236,8 +238,9 @@ $html = @"
   .pct{margin-left:auto;font-weight:800;font-size:16px}
   .cnt{color:var(--mut);font-size:12px;min-width:62px;text-align:right}
   .foot{color:var(--mut);font-size:11px;text-align:center;padding:18px}
-  details.lb{background:var(--card);border:1px solid var(--line);border-radius:12px;margin-top:8px;overflow:hidden}
-  details.lb>summary{list-style:none;cursor:pointer;padding:12px 14px;font-weight:700;font-size:14px}
+  details.lb{background:var(--card);border:1px solid var(--line);border-radius:12px;margin:10px auto 0;max-width:380px;overflow:hidden}
+  details.lb[open]{max-width:460px}
+  details.lb>summary{list-style:none;cursor:pointer;padding:12px 14px;font-weight:700;font-size:14px;text-align:center}
   details.lb>summary::-webkit-details-marker{display:none}
   .lbhead,.lbrow{display:flex;align-items:center;gap:10px;padding:7px 14px;font-size:13px}
   .lbhead{color:var(--mut);font-weight:700;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
@@ -251,6 +254,18 @@ $html = @"
   .kohead{margin:22px 2px 2px;font-size:15px;font-weight:800;color:#cdd9ec;padding-top:10px;border-top:1px solid var(--line)}
   .kflag{width:24px;height:16px;border-radius:2px;object-fit:cover;box-shadow:0 0 0 1px #0006}
   .kteam{min-width:48px}
+  .grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;align-items:start;margin-top:8px}
+  .grid details.game{margin-top:0}
+  .grid details.game[open]{grid-column:1 / -1}
+  .grid summary{flex-direction:column;align-items:stretch;text-align:center;gap:5px;padding:10px 8px}
+  .ghead{display:flex;justify-content:center;align-items:baseline;gap:6px}
+  .grid .gid{min-width:0}
+  .gres{font-size:19px;font-weight:800}
+  .gres.pend{font-size:12px;font-weight:600;color:var(--mut)}
+  .gpick{font-size:16px;font-weight:800;border-radius:7px;padding:3px 6px}
+  .gpick.win{background:#13351f;color:#7ee2a0}
+  .gpick.lose{background:#3a1620;color:#ff9aa6}
+  .gpick.pend{background:#16263f;color:#8fb6ff}
 </style>
 </head>
 <body>
@@ -262,11 +277,13 @@ $html = @"
     <span class='pill'>Rank <b>#$uRank</b> / $nPlayers</span>
     <span class='pill'>Puntos <b>$uScore</b></span>
   </div>
+  $lbHtml
 </header>
 <div class='hint'>Toca un partido para ver todas las predicciones. Verde = resultado real &#10003; &middot; Azul = tu pick. Se actualiza autom&aacute;ticamente.</div>
 <main>
-$lbHtml
+<div class='grid'>
 $($sb.ToString())
+</div>
 $koHtml
 </main>
 <div class='foot'>$nG partidos &middot; actualizado $gen</div>

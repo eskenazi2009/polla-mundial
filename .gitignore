@@ -1,2 +1,4 @@
 public/
 *.local
+public-test/
+*.local.ps1
