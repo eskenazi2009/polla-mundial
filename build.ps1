@@ -133,7 +133,7 @@ for ($j = 0; $j -lt $nG; $j++) {
     }
     $imgH = if ($hf) { "<img src='$hf' alt=''>" } else { '' }
     $imgA = if ($af) { "<img src='$af' alt=''>" } else { '' }
-    [void]$sb.Append("<details class='game'><summary><div class='ghead'><span class='gid'>G$($j+1)</span><span class='gm'>$hc-$ac</span></div><div class='gres$resCls'>$resTxt</div>$pickHtml</summary><div class='body'><div class='match'>$imgH<span>$hc</span><span class='vs'>vs</span><span>$ac</span>$imgA</div><div class='meta'>$resBadge$youBadge<span class='mdate'>$date</span><span class='mtot'>$total predicciones</span></div><div class='dist'>$($bars.ToString())</div></div></details>")
+    [void]$sb.Append("<details class='game' name='games'><summary><div class='ghead'><span class='gid'>G$($j+1)</span><span class='gm'>$hc-$ac</span></div><div class='gres$resCls'>$resTxt</div>$pickHtml</summary><div class='body'><div class='match'>$imgH<span>$hc</span><span class='vs'>vs</span><span>$ac</span>$imgA</div><div class='meta'>$resBadge$youBadge<span class='mdate'>$date</span><span class='mtot'>$total predicciones</span></div><div class='dist'>$($bars.ToString())</div></div></details>")
 }
 
 # ---- Champion + knockout-bracket prediction distributions ----
@@ -177,7 +177,7 @@ foreach ($st in $stages) {
         $lbl = if ($mp.Count) { $mp -join ', ' } else { '-' }
         $chip = "<span class='chip cyou'>T&uacute;: $lbl</span>"
     }
-    [void]$koSb.Append("<details class='game'><summary><span class='gid'>KO</span><span class='gm'>$($st.label)</span>$chip</summary><div class='body'><div class='meta'><span class='mtot'>equipos m&aacute;s elegidos para llegar a esta ronda &middot; $nPlayersAll jugadores</span></div><div class='dist'>$($bars.ToString())</div></div></details>")
+    [void]$koSb.Append("<details class='game' name='ko'><summary><span class='gid'>KO</span><span class='gm'>$($st.label)</span>$chip</summary><div class='body'><div class='meta'><span class='mtot'>equipos m&aacute;s elegidos para llegar a esta ronda &middot; $nPlayersAll jugadores</span></div><div class='dist'>$($bars.ToString())</div></div></details>")
 }
 $koHtml = "<div class='kohead'>Eliminatorias &mdash; pron&oacute;sticos del bracket</div>" + $koSb.ToString()
 
@@ -205,7 +205,7 @@ $html = @"
   .pill{background:var(--card2);border:1px solid var(--line);border-radius:999px;padding:7px 13px}
   .pill b{color:#fff;font-size:18px}
   .hint{padding:10px 16px;color:var(--mut);font-size:12px;border-bottom:1px solid var(--line)}
-  main{max-width:680px;margin:0 auto;padding:10px 12px 30px}
+  main{max-width:1200px;margin:0 auto;padding:10px 16px 30px}
   details.game{background:var(--card);border:1px solid var(--line);border-radius:12px;margin-top:8px;overflow:hidden}
   summary{list-style:none;cursor:pointer;padding:12px 14px;display:flex;align-items:center;gap:8px;font-size:14px}
   summary::-webkit-details-marker{display:none}
@@ -254,15 +254,16 @@ $html = @"
   .kohead{margin:22px 2px 2px;font-size:15px;font-weight:800;color:#cdd9ec;padding-top:10px;border-top:1px solid var(--line)}
   .kflag{width:24px;height:16px;border-radius:2px;object-fit:cover;box-shadow:0 0 0 1px #0006}
   .kteam{min-width:48px}
-  .grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;align-items:start;margin-top:8px}
+  .grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;align-items:start;margin-top:10px}
   .grid details.game{margin-top:0}
   .grid details.game[open]{grid-column:1 / -1}
-  .grid summary{flex-direction:column;align-items:stretch;text-align:center;gap:5px;padding:10px 8px}
-  .ghead{display:flex;justify-content:center;align-items:baseline;gap:6px}
+  .grid summary{flex-direction:column;align-items:stretch;text-align:center;gap:9px;padding:20px 12px}
+  .ghead{display:flex;justify-content:center;align-items:baseline;gap:6px;font-size:15px}
   .grid .gid{min-width:0}
-  .gres{font-size:19px;font-weight:800}
-  .gres.pend{font-size:12px;font-weight:600;color:var(--mut)}
-  .gpick{font-size:16px;font-weight:800;border-radius:7px;padding:3px 6px}
+  .grid .gm{font-size:19px}
+  .gres{font-size:26px;font-weight:800}
+  .gres.pend{font-size:14px;font-weight:600;color:var(--mut)}
+  .gpick{font-size:19px;font-weight:800;border-radius:8px;padding:6px 10px}
   .gpick.win{background:#13351f;color:#7ee2a0}
   .gpick.lose{background:#3a1620;color:#ff9aa6}
   .gpick.pend{background:#16263f;color:#8fb6ff}
