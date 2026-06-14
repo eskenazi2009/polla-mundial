@@ -84,33 +84,14 @@ $cols = $model.groupCols; $rows = $model.rows; $nG = $cols.Count
 $me = $rows | Where-Object { $_.mine -eq $true } | Select-Object -First 1
 $months = 'Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'
 
-# ---- Pure scoring: 2 points per EXACT group-game scoreline, nothing else ----
-$playedIdx = @(); for ($j = 0; $j -lt $nG; $j++) { if ($cols[$j].played) { $playedIdx += $j } }
-$board = foreach ($r in $rows) {
-    $pts = 0
-    foreach ($j in $playedIdx) {
-        $g = $r.g[$j]
-        if ($g -and $g[0] -ne $null -and "$($g[0])-$($g[1])" -eq $cols[$j].actual) { $pts += 2 }
-    }
-    [pscustomobject]@{ name = $r.name; pts = $pts; mine = [bool]$r.mine }
-}
-$board = @($board | Sort-Object @{Expression = 'pts'; Descending = $true}, @{Expression = 'name'; Descending = $false})
-$rk = 0; $prev = [int]::MinValue
-for ($i = 0; $i -lt $board.Count; $i++) {
-    if ($board[$i].pts -ne $prev) { $rk = $i + 1; $prev = $board[$i].pts }
-    $board[$i] | Add-Member -NotePropertyName rk -NotePropertyValue $rk -Force
-}
-$meRow = $board | Where-Object { $_.mine } | Select-Object -First 1
-$myPts  = if ($meRow) { $meRow.pts } else { 0 }
-$myRank = if ($meRow) { $meRow.rk } else { 0 }
-
-# leaderboard rows
+# ---- Leaderboard: official pool standings (rank + score exactly as on the site) ----
+$board = @($rows | Sort-Object @{Expression = 'rank'; Descending = $false}, @{Expression = 'name'; Descending = $false})
 $lb = New-Object System.Text.StringBuilder
 foreach ($b in $board) {
     $cls = if ($b.mine) { 'lbrow me' } else { 'lbrow' }
-    [void]$lb.Append("<div class='$cls'><span class='lrk'>$($b.rk)</span><span class='lname'>$(Esc $b.name)</span><span class='lpts'>$($b.pts)</span></div>")
+    [void]$lb.Append("<div class='$cls'><span class='lrk'>$($b.rank)</span><span class='lname'>$(Esc $b.name)</span><span class='lpts'>$($b.score)</span></div>")
 }
-$lbHtml = "<details class='lb'><summary>Tabla de posiciones &middot; $($board.Count) jugadores &middot; 2 pts por acierto exacto</summary><div class='lbhead'><span class='lrk'>#</span><span class='lname'>Jugador</span><span class='lpts'>Pts</span></div><div class='lbbody'>$($lb.ToString())</div></details>"
+$lbHtml = "<details class='lb'><summary>Tabla de posiciones &middot; $($board.Count) jugadores</summary><div class='lbhead'><span class='lrk'>#</span><span class='lname'>Jugador</span><span class='lpts'>Pts</span></div><div class='lbbody'>$($lb.ToString())</div></details>"
 
 $sb = New-Object System.Text.StringBuilder
 for ($j = 0; $j -lt $nG; $j++) {
@@ -153,9 +134,54 @@ for ($j = 0; $j -lt $nG; $j++) {
     [void]$sb.Append("<details class='game'$openAttr><summary><span class='gid'>G$($j+1)</span><span class='gm'>$hc-$ac</span>$sumRes$sumYou</summary><div class='body'><div class='match'>$imgH<span>$hc</span><span class='vs'>vs</span><span>$ac</span>$imgA</div><div class='meta'>$resBadge$youBadge<span class='mdate'>$date</span><span class='mtot'>$total predicciones</span></div><div class='dist'>$($bars.ToString())</div></div></details>")
 }
 
+# ---- Champion + knockout-bracket prediction distributions ----
+function StagePicks($row, $key) {
+    if ($key -eq 'champion') {
+        if ($row.champion -and $row.champion[0] -ne $null) { return @($row.champion[0][0]) } else { return @() }
+    }
+    return @($row.$key | ForEach-Object { if ($_ -ne $null) { $_[0] } })
+}
+$stages = @(
+    @{ key='champion'; label='Campe&oacute;n';        small=$true  },
+    @{ key='final';    label='Finalistas';            small=$true  },
+    @{ key='sf';       label='Semifinalistas';        small=$true  },
+    @{ key='qf';       label='Cuartos de final';      small=$false },
+    @{ key='r16';      label='Octavos de final';      small=$false },
+    @{ key='r32';      label='Ronda de 32';           small=$false }
+)
+$nPlayersAll = $rows.Count
+$koSb = New-Object System.Text.StringBuilder
+foreach ($st in $stages) {
+    $counts = @{}
+    foreach ($r in $rows) { foreach ($tid in (StagePicks $r $st.key)) { if ($tid -ne $null) { $k = "$tid"; if ($counts.ContainsKey($k)) { $counts[$k]++ } else { $counts[$k] = 1 } } } }
+    if ($counts.Count -eq 0) { continue }
+    $mineSet = @{}; if ($me) { foreach ($t in (StagePicks $me $st.key)) { $mineSet["$t"] = $true } }
+    $sorted = @($counts.GetEnumerator() | Sort-Object -Property Value -Descending)
+    $maxc = $sorted[0].Value
+    $bars = New-Object System.Text.StringBuilder
+    foreach ($kv in $sorted) {
+        $tid = $kv.Key; $n = $kv.Value; $pct = [math]::Round(100.0 * $n / $nPlayersAll, 1)
+        $code = GetCode $tid; $fl = GetFlag $tid
+        $isMine = $mineSet.ContainsKey($tid)
+        $cls = if ($isMine) { 'drow mine' } else { 'drow' }
+        $w = [math]::Max(4.0, [double]$n / $maxc * 100)
+        $img = if ($fl) { "<img class='kflag' src='$fl' alt=''>" } else { '' }
+        $tag = if ($isMine) { "<span class='tg m'>T&Uacute;</span>" } else { '' }
+        [void]$bars.Append("<div class='$cls'><div class='barfill' style='width:$([math]::Round($w,1))%'></div>$img<span class='score kteam'>$code</span><span class='tags'>$tag</span><span class='pct'>$pct%</span><span class='cnt'>$n pers.</span></div>")
+    }
+    $chip = ''
+    if ($st.small -and $me) {
+        $mp = @(StagePicks $me $st.key | ForEach-Object { GetCode $_ })
+        $lbl = if ($mp.Count) { $mp -join ', ' } else { '-' }
+        $chip = "<span class='chip cyou'>T&uacute;: $lbl</span>"
+    }
+    [void]$koSb.Append("<details class='game'><summary><span class='gid'>KO</span><span class='gm'>$($st.label)</span>$chip</summary><div class='body'><div class='meta'><span class='mtot'>equipos m&aacute;s elegidos para llegar a esta ronda &middot; $nPlayersAll jugadores</span></div><div class='dist'>$($bars.ToString())</div></div></details>")
+}
+$koHtml = "<div class='kohead'>Eliminatorias &mdash; pron&oacute;sticos del bracket</div>" + $koSb.ToString()
+
 $uName = if ($me) { Esc $me.name } else { '-' }
-$uRank = $myRank
-$uScore = $myPts
+$uRank = if ($me) { $me.rank } else { 0 }
+$uScore = if ($me) { $me.score } else { 0 }
 $nPlayers = $rows.Count
 $gen = (Get-Date).ToUniversalTime().ToString('yyyy-MM-dd HH:mm') + " UTC"
 
@@ -173,9 +199,9 @@ $html = @"
   header{padding:14px 16px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,#141d2e,#0f1623)}
   h1{font-size:17px;margin:0 0 2px}
   .sub{font-size:12px;color:var(--mut)}
-  .me{margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;font-size:12px}
-  .pill{background:var(--card2);border:1px solid var(--line);border-radius:999px;padding:4px 10px}
-  .pill b{color:#fff}
+  .me{margin-top:10px;display:flex;gap:9px;flex-wrap:wrap;font-size:14px}
+  .pill{background:var(--card2);border:1px solid var(--line);border-radius:999px;padding:7px 13px}
+  .pill b{color:#fff;font-size:18px}
   .hint{padding:10px 16px;color:var(--mut);font-size:12px;border-bottom:1px solid var(--line)}
   main{max-width:680px;margin:0 auto;padding:10px 12px 30px}
   details.game{background:var(--card);border:1px solid var(--line);border-radius:12px;margin-top:8px;overflow:hidden}
@@ -222,6 +248,9 @@ $html = @"
   .lbrow.me .lrk{color:#8fb6ff}
   .lname{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .lpts{font-weight:800;min-width:34px;text-align:right}
+  .kohead{margin:22px 2px 2px;font-size:15px;font-weight:800;color:#cdd9ec;padding-top:10px;border-top:1px solid var(--line)}
+  .kflag{width:24px;height:16px;border-radius:2px;object-fit:cover;box-shadow:0 0 0 1px #0006}
+  .kteam{min-width:48px}
 </style>
 </head>
 <body>
@@ -238,6 +267,7 @@ $html = @"
 <main>
 $lbHtml
 $($sb.ToString())
+$koHtml
 </main>
 <div class='foot'>$nG partidos &middot; actualizado $gen</div>
 </body>
