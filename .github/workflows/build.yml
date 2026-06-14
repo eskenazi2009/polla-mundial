@@ -1,0 +1,46 @@
+name: Build Polla dashboard
+
+on:
+  schedule:
+    - cron: '0 */4 * * *'      # every 4 hours (UTC). Adjust as you like.
+  workflow_dispatch: {}          # lets you run it manually from the Actions tab
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow only one concurrent deployment.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate dashboard
+        shell: pwsh
+        env:
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          POLLA_EMAIL: ${{ secrets.POLLA_EMAIL }}
+          POLLA_PASSWORD: ${{ secrets.POLLA_PASSWORD }}
+        run: pwsh ./build.ps1 -OutDir ./public
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./public
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
