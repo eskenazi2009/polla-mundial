@@ -6,7 +6,8 @@
 param([string]$OutDir = "./public")
 
 $ErrorActionPreference = 'Stop'
-[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13
+try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13 }
+catch { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 }
 
 $ref   = 'bqkkplrrlmuxylnibdho'                 # public Supabase project ref for pollaworldcup.com
 $anon  = $env:SUPABASE_ANON_KEY
