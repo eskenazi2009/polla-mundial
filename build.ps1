@@ -231,7 +231,7 @@ $html = @"
   .barfill{position:absolute;left:0;top:0;bottom:0;background:var(--bar);z-index:0}
   .drow.hit .barfill{background:#1f5a35}
   .drow.mine .barfill{background:#23426e}
-  .drow>*{position:relative;z-index:1}
+  .drow>:not(.barfill){position:relative;z-index:1}
   .score{font-weight:800;font-size:16px;min-width:46px}
   .tags{display:flex;gap:5px}
   .tg{font-size:10px;font-weight:700;padding:2px 6px;border-radius:6px}
