@@ -133,7 +133,9 @@ for ($j = 0; $j -lt $nG; $j++) {
     }
     $imgH = if ($hf) { "<img src='$hf' alt=''>" } else { '' }
     $imgA = if ($af) { "<img src='$af' alt=''>" } else { '' }
-    [void]$sb.Append("<details class='game' name='games'><summary><div class='ghead'><span class='gid'>G$($j+1)</span><span class='gm'>$hc-$ac</span></div><div class='gres$resCls'>$resTxt</div>$pickHtml</summary><div class='body'><div class='match'>$imgH<span>$hc</span><span class='vs'>vs</span><span>$ac</span>$imgA</div><div class='meta'>$resBadge$youBadge<span class='mdate'>$date</span><span class='mtot'>$total predicciones</span></div><div class='dist'>$($bars.ToString())</div></div></details>")
+    $sfH = if ($hf) { "<img class='sflag' src='$hf' alt=''>" } else { '' }
+    $sfA = if ($af) { "<img class='sflag' src='$af' alt=''>" } else { '' }
+    [void]$sb.Append("<details class='game' name='games'><summary><div class='ghead'><span class='gid'>G$($j+1)</span></div><div class='gmatch'>$sfH<span class='gm'>$hc</span><span class='gvs'>-</span><span class='gm'>$ac</span>$sfA</div><div class='gres$resCls'>$resTxt</div>$pickHtml</summary><div class='body'><div class='match'>$imgH<span>$hc</span><span class='vs'>vs</span><span>$ac</span>$imgA</div><div class='meta'>$resBadge$youBadge<span class='mdate'>$date</span><span class='mtot'>$total predicciones</span></div><div class='dist'>$($bars.ToString())</div></div></details>")
 }
 
 # ---- Champion + knockout-bracket prediction distributions ----
@@ -238,19 +240,19 @@ $html = @"
   .pct{margin-left:auto;font-weight:800;font-size:16px}
   .cnt{color:var(--mut);font-size:12px;min-width:62px;text-align:right}
   .foot{color:var(--mut);font-size:11px;text-align:center;padding:18px}
-  details.lb{background:var(--card);border:1px solid var(--line);border-radius:12px;margin:10px auto 0;max-width:380px;overflow:hidden}
-  details.lb[open]{max-width:460px}
-  details.lb>summary{list-style:none;cursor:pointer;padding:12px 14px;font-weight:700;font-size:14px;text-align:center}
+  details.lb{background:var(--card);border:1px solid var(--line);border-radius:12px;margin:12px auto 0;max-width:580px;overflow:hidden}
+  details.lb[open]{max-width:760px}
+  details.lb>summary{list-style:none;cursor:pointer;padding:16px 18px;font-weight:700;font-size:18px;text-align:center}
   details.lb>summary::-webkit-details-marker{display:none}
-  .lbhead,.lbrow{display:flex;align-items:center;gap:10px;padding:7px 14px;font-size:13px}
+  .lbhead,.lbrow{display:flex;align-items:center;gap:12px;padding:10px 18px;font-size:16px}
   .lbhead{color:var(--mut);font-weight:700;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
-  .lbbody{max-height:60vh;overflow:auto}
+  .lbbody{max-height:72vh;overflow:auto}
   .lbrow:nth-child(even){background:#1b2536}
   .lbrow.me{background:#16263f;font-weight:800;color:#cfe0ff}
-  .lrk{min-width:40px;color:var(--mut);font-weight:700}
+  .lrk{min-width:52px;color:var(--mut);font-weight:700}
   .lbrow.me .lrk{color:#8fb6ff}
   .lname{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .lpts{font-weight:800;min-width:34px;text-align:right}
+  .lpts{font-weight:800;min-width:46px;text-align:right}
   .kohead{margin:22px 2px 2px;font-size:15px;font-weight:800;color:#cdd9ec;padding-top:10px;border-top:1px solid var(--line)}
   .kflag{width:24px;height:16px;border-radius:2px;object-fit:cover;box-shadow:0 0 0 1px #0006}
   .kteam{min-width:48px}
@@ -258,9 +260,12 @@ $html = @"
   .grid details.game{margin-top:0}
   .grid details.game[open]{grid-column:1 / -1}
   .grid summary{flex-direction:column;align-items:stretch;text-align:center;gap:9px;padding:20px 12px}
-  .ghead{display:flex;justify-content:center;align-items:baseline;gap:6px;font-size:15px}
+  .ghead{display:flex;justify-content:center;font-size:13px}
   .grid .gid{min-width:0}
   .grid .gm{font-size:19px}
+  .gmatch{display:flex;align-items:center;justify-content:center;gap:7px;flex-wrap:wrap}
+  .sflag{width:26px;height:17px;border-radius:2px;object-fit:cover;box-shadow:0 0 0 1px #0006}
+  .gvs{color:var(--mut);font-size:14px;font-weight:700}
   .gres{font-size:26px;font-weight:800}
   .gres.pend{font-size:14px;font-weight:600;color:var(--mut)}
   .gpick{font-size:19px;font-weight:800;border-radius:8px;padding:6px 10px}
