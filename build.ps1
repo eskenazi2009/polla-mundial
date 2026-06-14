@@ -84,6 +84,34 @@ $cols = $model.groupCols; $rows = $model.rows; $nG = $cols.Count
 $me = $rows | Where-Object { $_.mine -eq $true } | Select-Object -First 1
 $months = 'Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'
 
+# ---- Pure scoring: 2 points per EXACT group-game scoreline, nothing else ----
+$playedIdx = @(); for ($j = 0; $j -lt $nG; $j++) { if ($cols[$j].played) { $playedIdx += $j } }
+$board = foreach ($r in $rows) {
+    $pts = 0
+    foreach ($j in $playedIdx) {
+        $g = $r.g[$j]
+        if ($g -and $g[0] -ne $null -and "$($g[0])-$($g[1])" -eq $cols[$j].actual) { $pts += 2 }
+    }
+    [pscustomobject]@{ name = $r.name; pts = $pts; mine = [bool]$r.mine }
+}
+$board = @($board | Sort-Object @{Expression = 'pts'; Descending = $true}, @{Expression = 'name'; Descending = $false})
+$rk = 0; $prev = [int]::MinValue
+for ($i = 0; $i -lt $board.Count; $i++) {
+    if ($board[$i].pts -ne $prev) { $rk = $i + 1; $prev = $board[$i].pts }
+    $board[$i] | Add-Member -NotePropertyName rk -NotePropertyValue $rk -Force
+}
+$meRow = $board | Where-Object { $_.mine } | Select-Object -First 1
+$myPts  = if ($meRow) { $meRow.pts } else { 0 }
+$myRank = if ($meRow) { $meRow.rk } else { 0 }
+
+# leaderboard rows
+$lb = New-Object System.Text.StringBuilder
+foreach ($b in $board) {
+    $cls = if ($b.mine) { 'lbrow me' } else { 'lbrow' }
+    [void]$lb.Append("<div class='$cls'><span class='lrk'>$($b.rk)</span><span class='lname'>$(Esc $b.name)</span><span class='lpts'>$($b.pts)</span></div>")
+}
+$lbHtml = "<details class='lb'><summary>Tabla de posiciones &middot; $($board.Count) jugadores &middot; 2 pts por acierto exacto</summary><div class='lbhead'><span class='lrk'>#</span><span class='lname'>Jugador</span><span class='lpts'>Pts</span></div><div class='lbbody'>$($lb.ToString())</div></details>"
+
 $sb = New-Object System.Text.StringBuilder
 for ($j = 0; $j -lt $nG; $j++) {
     $c = $cols[$j]
@@ -126,8 +154,8 @@ for ($j = 0; $j -lt $nG; $j++) {
 }
 
 $uName = if ($me) { Esc $me.name } else { '-' }
-$uRank = if ($me) { $me.rank } else { 0 }
-$uScore = if ($me) { $me.score } else { 0 }
+$uRank = $myRank
+$uScore = $myPts
 $nPlayers = $rows.Count
 $gen = (Get-Date).ToUniversalTime().ToString('yyyy-MM-dd HH:mm') + " UTC"
 
@@ -182,6 +210,18 @@ $html = @"
   .pct{margin-left:auto;font-weight:800;font-size:16px}
   .cnt{color:var(--mut);font-size:12px;min-width:62px;text-align:right}
   .foot{color:var(--mut);font-size:11px;text-align:center;padding:18px}
+  details.lb{background:var(--card);border:1px solid var(--line);border-radius:12px;margin-top:8px;overflow:hidden}
+  details.lb>summary{list-style:none;cursor:pointer;padding:12px 14px;font-weight:700;font-size:14px}
+  details.lb>summary::-webkit-details-marker{display:none}
+  .lbhead,.lbrow{display:flex;align-items:center;gap:10px;padding:7px 14px;font-size:13px}
+  .lbhead{color:var(--mut);font-weight:700;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+  .lbbody{max-height:60vh;overflow:auto}
+  .lbrow:nth-child(even){background:#1b2536}
+  .lbrow.me{background:#16263f;font-weight:800;color:#cfe0ff}
+  .lrk{min-width:40px;color:var(--mut);font-weight:700}
+  .lbrow.me .lrk{color:#8fb6ff}
+  .lname{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .lpts{font-weight:800;min-width:34px;text-align:right}
 </style>
 </head>
 <body>
@@ -196,6 +236,7 @@ $html = @"
 </header>
 <div class='hint'>Toca un partido para ver todas las predicciones. Verde = resultado real &#10003; &middot; Azul = tu pick. Se actualiza autom&aacute;ticamente.</div>
 <main>
+$lbHtml
 $($sb.ToString())
 </main>
 <div class='foot'>$nG partidos &middot; actualizado $gen</div>

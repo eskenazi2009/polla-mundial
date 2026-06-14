@@ -1,6 +1,8 @@
 name: Build Polla dashboard
 
 on:
+  push:
+    branches: [main]             # rebuild immediately whenever the code changes
   schedule:
     - cron: '0 */2 * * *'      # every 2 hours (UTC). Adjust as you like.
   workflow_dispatch: {}          # lets you run it manually from the Actions tab
