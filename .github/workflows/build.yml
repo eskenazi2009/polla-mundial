@@ -4,10 +4,9 @@ on:
   push:
     branches: [main]             # rebuild immediately whenever the code changes
   schedule:
-    # Every 30 min only between 1:00pm and 3:00am Panama/EST (UTC-5). Cron is in UTC.
-    - cron: '*/30 18-23 * * *'   # Panama 1:00pm - 6:30pm  (UTC 18:00-23:30)
-    - cron: '*/30 0-7 * * *'     # Panama 7:00pm - 2:30am  (UTC 00:00-07:30)
-    - cron: '0 8 * * *'          # Panama 3:00am           (UTC 08:00)
+    # Every 3 hours within the 1:00pm-3:00am Panama/EST (UTC-5) window. Cron is in UTC.
+    # Fires at Panama 1pm, 4pm, 7pm, 10pm, 1am  ->  UTC 18, 21, 00, 03, 06.
+    - cron: '0 0,3,6,18,21 * * *'
   workflow_dispatch: {}          # lets you run it manually from the Actions tab
 
 permissions:
