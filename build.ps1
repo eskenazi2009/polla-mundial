@@ -154,6 +154,27 @@ $stages = @(
     @{ key='r32';      label='Ronda de 32';           small=$false }
 )
 $nPlayersAll = $rows.Count
+
+# ---- Actual advancers per stage ("made it through"), taken from the site's own bracket ----
+# $model.koCols holds the resolved bracket: each slot's actualWinnerId is a team that reached
+# that round. The keys map 1:1 to the prediction stages above (r16..champion). There is no
+# round_of_32 column in the feed, so the r32 ("Ronda de 32") stage has no actual marks.
+$koKeyByStage = @{ r16 = 'round_of_16'; qf = 'quarter'; sf = 'semi'; final = 'final'; champion = 'champion' }
+$advanced = @{}      # stage.key -> @{ "teamId" = $true }
+$advResolved = @{}   # stage.key -> $true once the site marks that round resolved
+foreach ($sk in $koKeyByStage.Keys) {
+    $set = @{}; $res = $false
+    $col = if ($model.koCols) { @($model.koCols | Where-Object { $_.key -eq $koKeyByStage[$sk] })[0] } else { $null }
+    if ($col) {
+        if ($col.resolved) { $res = $true }
+        foreach ($slot in $col.slots) {
+            $wid = $slot.actualWinnerId
+            if ($null -ne $wid -and "$wid" -ne '') { $set["$wid"] = $true }
+        }
+    }
+    $advanced[$sk] = $set; $advResolved[$sk] = $res
+}
+
 $koSb = New-Object System.Text.StringBuilder
 foreach ($st in $stages) {
     $counts = @{}
@@ -167,19 +188,32 @@ foreach ($st in $stages) {
         $tid = $kv.Key; $n = $kv.Value; $pct = [math]::Round(100.0 * $n / $nPlayersAll, 1)
         $code = GetCode $tid; $fl = GetFlag $tid
         $isMine = $mineSet.ContainsKey($tid)
-        $cls = if ($isMine) { 'drow mine' } else { 'drow' }
+        $advSet = $advanced[$st.key]
+        $isAdv  = ($advSet -and $advSet.ContainsKey($tid))
+        $cls = 'drow'; if ($isAdv) { $cls += ' adv' }; if ($isMine) { $cls += ' mine' }
         $w = [math]::Max(4.0, [double]$n / $maxc * 100)
         $img = if ($fl) { "<img class='kflag' src='$fl' alt=''>" } else { '' }
-        $tag = if ($isMine) { "<span class='tg m'>T&Uacute;</span>" } else { '' }
+        $tag = ''
+        if ($isAdv)  { $tag += "<span class='tg a'>&#10003;</span>" }
+        if ($isMine) { $tag += "<span class='tg m'>T&Uacute;</span>" }
         [void]$bars.Append("<div class='$cls'><div class='barfill' style='width:$([math]::Round($w,1))%'></div>$img<span class='score kteam'>$code</span><span class='tags'>$tag</span><span class='pct'>$pct%</span><span class='cnt'>$n pers.</span></div>")
     }
+    $advSet = $advanced[$st.key]
+    $nAdv = if ($advSet) { $advSet.Count } else { 0 }
+    $isResolved = ($advResolved[$st.key] -and $nAdv -gt 0)
+    $myHits = 0; if ($advSet) { foreach ($t in $mineSet.Keys) { if ($advSet.ContainsKey($t)) { $myHits++ } } }
+
     $chip = ''
+    if ($isResolved) { $chip += "<span class='chip cres'>&#10003; $nAdv clasificados</span>" }
     if ($st.small -and $me) {
         $mp = @(StagePicks $me $st.key | ForEach-Object { GetCode $_ })
         $lbl = if ($mp.Count) { $mp -join ', ' } else { '-' }
-        $chip = "<span class='chip cyou'>T&uacute;: $lbl</span>"
+        $chip += "<span class='chip cyou'>T&uacute;: $lbl</span>"
     }
-    [void]$koSb.Append("<details class='game' name='ko'><summary><span class='gid'>KO</span><span class='gm'>$($st.label)</span>$chip</summary><div class='body'><div class='meta'><span class='mtot'>equipos m&aacute;s elegidos para llegar a esta ronda &middot; $nPlayersAll jugadores</span></div><div class='dist'>$($bars.ToString())</div></div></details>")
+    if ($isResolved -and $me) { $chip += "<span class='chip cyou'>Aciertos: $myHits</span>" }
+
+    $legend = if ($isResolved) { "<span class='mtot'>&#10003; clasific&oacute; a esta ronda</span>" } else { '' }
+    [void]$koSb.Append("<details class='game' name='ko'><summary><span class='gid'>KO</span><span class='gm'>$($st.label)</span>$chip</summary><div class='body'><div class='meta'><span class='mtot'>equipos m&aacute;s elegidos para llegar a esta ronda &middot; $nPlayersAll jugadores</span>$legend</div><div class='dist'>$($bars.ToString())</div></div></details>")
 }
 $koHtml = "<div class='kohead'>Eliminatorias &mdash; pron&oacute;sticos del bracket</div>" + $koSb.ToString()
 
@@ -187,7 +221,8 @@ $uName = if ($me) { Esc $me.name } else { '-' }
 $uRank = if ($me) { $me.rank } else { 0 }
 $uScore = if ($me) { $me.score } else { 0 }
 $nPlayers = $rows.Count
-$gen = (Get-Date).ToUniversalTime().ToString('yyyy-MM-dd HH:mm') + " UTC"
+$genPa = (Get-Date).ToUniversalTime().AddHours(-5)   # Panama = UTC-5, no DST
+$gen = "{0} {1} {2:00}:{3:00} (Panam&aacute;)" -f $genPa.Day, $months[$genPa.Month - 1], $genPa.Hour, $genPa.Minute
 
 $html = @"
 <!DOCTYPE html>
@@ -230,12 +265,15 @@ $html = @"
   .drow{position:relative;display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:9px;margin-top:6px;background:var(--card2);overflow:hidden}
   .barfill{position:absolute;left:0;top:0;bottom:0;background:var(--bar);z-index:0}
   .drow.hit .barfill{background:#1f5a35}
+  .drow.adv .barfill{background:#1f5a35}
   .drow.mine .barfill{background:#23426e}
+  .drow.adv.mine .barfill{background:#1c6b46}
   .drow>:not(.barfill){position:relative;z-index:1}
   .score{font-weight:800;font-size:16px;min-width:46px}
   .tags{display:flex;gap:5px}
   .tg{font-size:10px;font-weight:700;padding:2px 6px;border-radius:6px}
   .tg.h{background:#22c55e;color:#06250f}
+  .tg.a{background:#22c55e;color:#06250f}
   .tg.m{background:#3b82f6;color:#04122b}
   .pct{margin-left:auto;font-weight:800;font-size:16px}
   .cnt{color:var(--mut);font-size:12px;min-width:62px;text-align:right}
@@ -285,7 +323,7 @@ $html = @"
   </div>
   $lbHtml
 </header>
-<div class='hint'>Toca un partido para ver todas las predicciones. Verde = resultado real &#10003; &middot; Azul = tu pick. Se actualiza autom&aacute;ticamente.</div>
+<div class='hint'>Toca un partido para ver todas las predicciones. Verde = resultado real / equipo clasificado &#10003; &middot; Azul = tu pick. Puntos y posiciones tomados en vivo del sitio oficial. Se actualiza autom&aacute;ticamente.</div>
 <main>
 <div class='grid'>
 $($sb.ToString())
