@@ -199,7 +199,7 @@ foreach ($st in $stages) {
         $w = [math]::Max(4.0, [double]$n / $maxc * 100)
         $img = if ($fl) { "<img class='kflag' src='$fl' alt=''>" } else { '' }
         $tag = ''
-        if ($isAdv)  { $tag += "<span class='tg a'>&#10003;</span>" }
+        if ($isAdv) { if ($isMine) { $tag += "<span class='tg a'>&#10003;</span>" } else { $tag += "<span class='tg miss'>&#10003;</span>" } }
         if ($isMine) { $tag += "<span class='tg m'>T&Uacute;</span>" }
         [void]$bars.Append("<div class='$cls'><div class='barfill' style='width:$([math]::Round($w,1))%'></div>$img<span class='score kteam'>$code</span><span class='tags'>$tag</span><span class='pct'>$pct%</span><span class='cnt'>$n pers.</span></div>")
     }
@@ -217,7 +217,7 @@ foreach ($st in $stages) {
     }
     if ($isResolved -and $me) { $chip += "<span class='chip cyou'>Aciertos: $myHits</span>" }
 
-    $legend = if ($isResolved) { "<span class='mtot'>&#10003; clasific&oacute; a esta ronda</span>" } else { '' }
+    $legend = if ($isResolved) { "<span class='mtot'>&#10003; clasific&oacute; &middot; verde = la ten&iacute;as, rojo = no la ten&iacute;as</span>" } else { '' }
     [void]$koSb.Append("<details class='game' name='ko'><summary><span class='gid'>KO</span><span class='gm'>$($st.label)</span>$chip</summary><div class='body'><div class='meta'><span class='mtot'>equipos m&aacute;s elegidos para llegar a esta ronda &middot; $nPlayersAll jugadores</span>$legend</div><div class='dist'>$($bars.ToString())</div></div></details>")
 }
 $koHtml = "<div class='kohead'>Eliminatorias &mdash; pron&oacute;sticos del bracket</div>" + $koSb.ToString()
@@ -270,15 +270,16 @@ $html = @"
   .drow{position:relative;display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:9px;margin-top:6px;background:var(--card2);overflow:hidden}
   .barfill{position:absolute;left:0;top:0;bottom:0;background:var(--bar);z-index:0}
   .drow.hit .barfill{background:#1f5a35}
-  .drow.adv .barfill{background:#1f5a35}
+  .drow.adv .barfill{background:#6e2233}
   .drow.mine .barfill{background:#23426e}
-  .drow.adv.mine .barfill{background:#1c6b46}
+  .drow.adv.mine .barfill{background:#1f6b3f}
   .drow>:not(.barfill){position:relative;z-index:1}
   .score{font-weight:800;font-size:16px;min-width:46px}
   .tags{display:flex;gap:5px}
   .tg{font-size:10px;font-weight:700;padding:2px 6px;border-radius:6px}
   .tg.h{background:#22c55e;color:#06250f}
   .tg.a{background:#22c55e;color:#06250f}
+  .tg.miss{background:#ef4444;color:#2b0606}
   .tg.m{background:#3b82f6;color:#04122b}
   .pct{margin-left:auto;font-weight:800;font-size:16px}
   .cnt{color:var(--mut);font-size:12px;min-width:62px;text-align:right}
@@ -328,7 +329,7 @@ $html = @"
   </div>
   $lbHtml
 </header>
-<div class='hint'>Toca un partido para ver todas las predicciones. Verde = resultado real / equipo clasificado &#10003; &middot; Azul = tu pick. Puntos y posiciones tomados en vivo del sitio oficial. Se actualiza autom&aacute;ticamente.</div>
+<div class='hint'>Toca un partido para ver todas las predicciones. Verde = acierto &#10003; &middot; Rojo = clasific&oacute; pero no la ten&iacute;as &middot; Azul = tu pick. Puntos y posiciones tomados en vivo del sitio oficial. Se actualiza autom&aacute;ticamente.</div>
 <main>
 <div class='grid'>
 $($sb.ToString())
