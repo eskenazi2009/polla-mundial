@@ -65,38 +65,6 @@ if ($end -lt 0) { throw "Could not parse the data model." }
 $model = $stream.Substring($start, $end - $start + 1) | ConvertFrom-Json
 Write-Host "Parsed model: $($model.totalPools) participants, $($model.groupCols.Count) games."
 
-# ===== TEMP DIAGNOSTIC (remove after verifying live knockout schema) =====
-try {
-    Write-Host "DIAG props: $($model.PSObject.Properties.Name -join ', ')"
-    $tmap = @{}; foreach ($p in $model.teams.PSObject.Properties) { $tmap[$p.Name] = $p.Value.code }
-    Write-Host "DIAG koCols keys: $(@($model.koCols | ForEach-Object { $_.key }) -join ', ')"
-    foreach ($k in $model.koCols) {
-        $wn = @($k.slots | Where-Object { $null -ne $_.actualWinnerId -and "$($_.actualWinnerId)" -ne '' })
-        $wc = @($wn | ForEach-Object { if ($tmap.ContainsKey("$($_.actualWinnerId)")) { $tmap["$($_.actualWinnerId)"] } else { "$($_.actualWinnerId)" } })
-        Write-Host "DIAG ko $($k.key) resolved=$($k.resolved) winners=$($wn.Count): $($wc -join ',')"
-    }
-    Write-Host "DIAG r32Cols[0] props: $($model.r32Cols[0].PSObject.Properties.Name -join ', ')  json: $($model.r32Cols[0] | ConvertTo-Json -Compress -Depth 6)"
-    foreach ($sd in @('r32','r16','qf','sf','final')) {
-        $adv = @{}
-        foreach ($r in $model.rows) {
-            $arr = $r.$sd; if ($null -eq $arr) { continue }
-            foreach ($e in $arr) { if ($null -eq $e) { continue }; $pts = $e[1]; if ($null -ne $pts -and [double]$pts -gt 0) { $adv["$($e[0])"] = $true } }
-        }
-        $codes = @($adv.Keys | ForEach-Object { if ($tmap.ContainsKey($_)) { $tmap[$_] } else { $_ } } | Sort-Object)
-        Write-Host "DIAG advanced[$sd] (pick pts>0) count=$($adv.Count): $($codes -join ',')"
-    }
-    $champAdv = @{}
-    foreach ($r in $model.rows) { if ($r.champion -and $null -ne $r.champion[0]) { $c = $r.champion[0]; if ($null -ne $c[1] -and [double]$c[1] -gt 0) { $champAdv["$($c[0])"] = $true } } }
-    Write-Host "DIAG advanced[champion]: $(@($champAdv.Keys | ForEach-Object { $tmap[$_] }) -join ',')"
-    $mrow = $model.rows | Where-Object { $_.mine -eq $true } | Select-Object -First 1
-    if ($mrow) {
-        Write-Host "DIAG mine=$($mrow.name) score=$($mrow.score)"
-        Write-Host "DIAG mine.r32: $(@($mrow.r32 | ForEach-Object { if ($_) { (($(if($tmap.ContainsKey("$($_[0])")){$tmap["$($_[0])"]}else{$_[0]})) + ':' + $_[1]) } }) -join ' ')"
-        Write-Host "DIAG mine.r16: $(@($mrow.r16 | ForEach-Object { if ($_) { (($(if($tmap.ContainsKey("$($_[0])")){$tmap["$($_[0])"]}else{$_[0]})) + ':' + $_[1]) } }) -join ' ')"
-    }
-} catch { Write-Host "DIAG error: $($_.Exception.Message)" }
-# ===== END TEMP DIAGNOSTIC =====
-
 # ---------- 4) Generate the static dashboard ----------
 $teams = @{}; $flagData = @{}
 foreach ($p in $model.teams.PSObject.Properties) { $teams[$p.Name] = $p.Value.code }
@@ -187,24 +155,29 @@ $stages = @(
 )
 $nPlayersAll = $rows.Count
 
-# ---- Actual advancers per stage ("made it through"), taken from the site's own bracket ----
-# $model.koCols holds the resolved bracket: each slot's actualWinnerId is a team that reached
-# that round. The keys map 1:1 to the prediction stages above (r16..champion). There is no
-# round_of_32 column in the feed, so the r32 ("Ronda de 32") stage has no actual marks.
-$koKeyByStage = @{ r16 = 'round_of_16'; qf = 'quarter'; sf = 'semi'; final = 'final'; champion = 'champion' }
+# ---- Actual advancers per stage ("made it through"), from the site's own scoring ----
+# Every bracket pick is [teamId, pointsEarned]; pointsEarned > 0 means that team actually
+# reached that round (the site awards R32=1, R16=2, QF=4, SF=8 pts per correct team).
+# Aggregating pts>0 across all players gives the authoritative set of teams that advanced,
+# and it updates live as games are played. (This is the only signal that covers Ronda de 32 -
+# the koCols bracket only resolves from Octavos onward.)
 $advanced = @{}      # stage.key -> @{ "teamId" = $true }
-$advResolved = @{}   # stage.key -> $true once the site marks that round resolved
-foreach ($sk in $koKeyByStage.Keys) {
-    $set = @{}; $res = $false
-    $col = if ($model.koCols) { @($model.koCols | Where-Object { $_.key -eq $koKeyByStage[$sk] })[0] } else { $null }
-    if ($col) {
-        if ($col.resolved) { $res = $true }
-        foreach ($slot in $col.slots) {
-            $wid = $slot.actualWinnerId
-            if ($null -ne $wid -and "$wid" -ne '') { $set["$wid"] = $true }
+$advResolved = @{}   # stage.key -> $true once at least one team has advanced
+foreach ($stk in @('r32', 'r16', 'qf', 'sf', 'final', 'champion')) {
+    $set = @{}
+    foreach ($r in $rows) {
+        if ($stk -eq 'champion') {
+            if ($r.champion -and $null -ne $r.champion[0]) {
+                $pair = $r.champion[0]
+                if ($null -ne $pair[1] -and [double]$pair[1] -gt 0) { $set["$($pair[0])"] = $true }
+            }
+        } else {
+            $arr = $r.$stk
+            if ($arr) { foreach ($e in $arr) { if ($null -ne $e -and $null -ne $e[1] -and [double]$e[1] -gt 0) { $set["$($e[0])"] = $true } } }
         }
     }
-    $advanced[$sk] = $set; $advResolved[$sk] = $res
+    $advanced[$stk] = $set
+    $advResolved[$stk] = ($set.Count -gt 0)
 }
 
 $koSb = New-Object System.Text.StringBuilder
