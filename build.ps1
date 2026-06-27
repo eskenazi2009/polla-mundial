@@ -65,6 +65,38 @@ if ($end -lt 0) { throw "Could not parse the data model." }
 $model = $stream.Substring($start, $end - $start + 1) | ConvertFrom-Json
 Write-Host "Parsed model: $($model.totalPools) participants, $($model.groupCols.Count) games."
 
+# ===== TEMP DIAGNOSTIC (remove after verifying live knockout schema) =====
+try {
+    Write-Host "DIAG props: $($model.PSObject.Properties.Name -join ', ')"
+    $tmap = @{}; foreach ($p in $model.teams.PSObject.Properties) { $tmap[$p.Name] = $p.Value.code }
+    Write-Host "DIAG koCols keys: $(@($model.koCols | ForEach-Object { $_.key }) -join ', ')"
+    foreach ($k in $model.koCols) {
+        $wn = @($k.slots | Where-Object { $null -ne $_.actualWinnerId -and "$($_.actualWinnerId)" -ne '' })
+        $wc = @($wn | ForEach-Object { if ($tmap.ContainsKey("$($_.actualWinnerId)")) { $tmap["$($_.actualWinnerId)"] } else { "$($_.actualWinnerId)" } })
+        Write-Host "DIAG ko $($k.key) resolved=$($k.resolved) winners=$($wn.Count): $($wc -join ',')"
+    }
+    Write-Host "DIAG r32Cols[0] props: $($model.r32Cols[0].PSObject.Properties.Name -join ', ')  json: $($model.r32Cols[0] | ConvertTo-Json -Compress -Depth 6)"
+    foreach ($sd in @('r32','r16','qf','sf','final')) {
+        $adv = @{}
+        foreach ($r in $model.rows) {
+            $arr = $r.$sd; if ($null -eq $arr) { continue }
+            foreach ($e in $arr) { if ($null -eq $e) { continue }; $pts = $e[1]; if ($null -ne $pts -and [double]$pts -gt 0) { $adv["$($e[0])"] = $true } }
+        }
+        $codes = @($adv.Keys | ForEach-Object { if ($tmap.ContainsKey($_)) { $tmap[$_] } else { $_ } } | Sort-Object)
+        Write-Host "DIAG advanced[$sd] (pick pts>0) count=$($adv.Count): $($codes -join ',')"
+    }
+    $champAdv = @{}
+    foreach ($r in $model.rows) { if ($r.champion -and $null -ne $r.champion[0]) { $c = $r.champion[0]; if ($null -ne $c[1] -and [double]$c[1] -gt 0) { $champAdv["$($c[0])"] = $true } } }
+    Write-Host "DIAG advanced[champion]: $(@($champAdv.Keys | ForEach-Object { $tmap[$_] }) -join ',')"
+    $mrow = $model.rows | Where-Object { $_.mine -eq $true } | Select-Object -First 1
+    if ($mrow) {
+        Write-Host "DIAG mine=$($mrow.name) score=$($mrow.score)"
+        Write-Host "DIAG mine.r32: $(@($mrow.r32 | ForEach-Object { if ($_) { (($(if($tmap.ContainsKey("$($_[0])")){$tmap["$($_[0])"]}else{$_[0]})) + ':' + $_[1]) } }) -join ' ')"
+        Write-Host "DIAG mine.r16: $(@($mrow.r16 | ForEach-Object { if ($_) { (($(if($tmap.ContainsKey("$($_[0])")){$tmap["$($_[0])"]}else{$_[0]})) + ':' + $_[1]) } }) -join ' ')"
+    }
+} catch { Write-Host "DIAG error: $($_.Exception.Message)" }
+# ===== END TEMP DIAGNOSTIC =====
+
 # ---------- 4) Generate the static dashboard ----------
 $teams = @{}; $flagData = @{}
 foreach ($p in $model.teams.PSObject.Properties) { $teams[$p.Name] = $p.Value.code }
