@@ -65,6 +65,22 @@ if ($end -lt 0) { throw "Could not parse the data model." }
 $model = $stream.Substring($start, $end - $start + 1) | ConvertFrom-Json
 Write-Host "Parsed model: $($model.totalPools) participants, $($model.groupCols.Count) games."
 
+# ===== TEMP DIAGNOSTIC (remove after) =====
+try {
+    $tmap = @{}; foreach ($p in $model.teams.PSObject.Properties) { $tmap[$p.Name] = $p.Value.code }
+    Write-Host "DIAG groupPlayed=$(@($model.groupCols | Where-Object { $_.played }).Count)/$($model.groupCols.Count)"
+    foreach ($k in $model.koCols) { $w = @($k.slots | Where-Object { $null -ne $_.actualWinnerId -and "$($_.actualWinnerId)" -ne '' }).Count; Write-Host "DIAG ko $($k.key) resolved=$($k.resolved) winners=$w" }
+    foreach ($sd in @('r32','r16','qf')) {
+        $vals = @{}; $byVal = @{}
+        foreach ($r in $model.rows) { $arr = $r.$sd; if ($arr) { foreach ($e in $arr) { if ($e) { $v = "$($e[1])"; if (-not $vals.ContainsKey($v)) { $vals[$v] = 0; $byVal[$v] = @{} }; $vals[$v]++; $byVal[$v]["$($e[0])"] = $true } } } }
+        Write-Host "DIAG $sd value->count: $(@($vals.GetEnumerator() | Sort-Object Name | ForEach-Object { "$($_.Name)=$($_.Value)" }) -join ' ')"
+        foreach ($v in ($byVal.Keys | Sort-Object)) { Write-Host "DIAG $sd val=$v distinctTeams=$($byVal[$v].Count): $(@($byVal[$v].Keys | ForEach-Object { $tmap[$_] } | Sort-Object) -join ',')" }
+    }
+    $mr = $model.rows | Where-Object { $_.mine } | Select-Object -First 1
+    if ($mr) { Write-Host "DIAG mine=$($mr.name) score=$($mr.score) r32: $(@($mr.r32 | ForEach-Object { if ($_) { ($tmap["$($_[0])"] + ':' + $_[1]) } }) -join ' ')" }
+} catch { Write-Host "DIAG err $($_.Exception.Message)" }
+# ===== END TEMP DIAGNOSTIC =====
+
 # ---------- 4) Generate the static dashboard ----------
 $teams = @{}; $flagData = @{}
 foreach ($p in $model.teams.PSObject.Properties) { $teams[$p.Name] = $p.Value.code }
