@@ -180,6 +180,21 @@ foreach ($stk in @('r32', 'r16', 'qf', 'sf', 'final', 'champion')) {
     $advResolved[$stk] = ($set.Count -gt 0)
 }
 
+# A stage is "decided" only when its round is fully resolved - so a team I picked is shown
+# as failed (red) only once it can no longer advance, never while it's still pending.
+# r32 is decided when the group stage is over; later rounds when the site marks them resolved.
+$koResolved = @{}
+foreach ($k in $model.koCols) { $koResolved[$k.key] = [bool]$k.resolved }
+$groupDone = (@($model.groupCols | Where-Object { -not $_.played }).Count -eq 0)
+$stageDecided = @{
+    r32      = $groupDone
+    r16      = [bool]$koResolved['round_of_16']
+    qf       = [bool]$koResolved['quarter']
+    sf       = [bool]$koResolved['semi']
+    final    = [bool]$koResolved['final']
+    champion = [bool]$koResolved['champion']
+}
+
 $koSb = New-Object System.Text.StringBuilder
 foreach ($st in $stages) {
     $counts = @{}
@@ -195,7 +210,14 @@ foreach ($st in $stages) {
         $isMine = $mineSet.ContainsKey($tid)
         $advSet = $advanced[$st.key]
         $isAdv  = ($advSet -and $advSet.ContainsKey($tid))
-        $cls = 'drow'; if ($isAdv) { $cls += ' adv' }; if ($isMine) { $cls += ' mine' }
+        # Bar color (knockout): advanced+mine=green, advanced+not-mine=red, picked-but-out=red,
+        # picked-and-still-pending=blue, not-picked-not-through=default.
+        $bc = ''
+        if ($isAdv -and $isMine) { $bc = ' bc-green' }
+        elseif ($isAdv) { $bc = ' bc-red' }
+        elseif ($isMine -and $stageDecided[$st.key]) { $bc = ' bc-red' }
+        elseif ($isMine) { $bc = ' bc-blue' }
+        $cls = 'drow' + $bc
         $w = [math]::Max(4.0, [double]$n / $maxc * 100)
         $img = if ($fl) { "<img class='kflag' src='$fl' alt=''>" } else { '' }
         $tag = ''
@@ -217,7 +239,7 @@ foreach ($st in $stages) {
     }
     if ($isResolved -and $me) { $chip += "<span class='chip cyou'>Aciertos: $myHits</span>" }
 
-    $legend = if ($isResolved) { "<span class='mtot'>&#10003; clasific&oacute; &middot; verde = la ten&iacute;as, rojo = no la ten&iacute;as</span>" } else { '' }
+    $legend = if ($isResolved) { "<span class='mtot'>verde: la elegiste y pas&oacute; &middot; rojo: pas&oacute; sin elegirla, o la elegiste y qued&oacute; fuera &middot; azul: tu pick a&uacute;n en juego</span>" } else { '' }
     [void]$koSb.Append("<details class='game' name='ko'><summary><span class='gid'>KO</span><span class='gm'>$($st.label)</span>$chip</summary><div class='body'><div class='meta'><span class='mtot'>equipos m&aacute;s elegidos para llegar a esta ronda &middot; $nPlayersAll jugadores</span>$legend</div><div class='dist'>$($bars.ToString())</div></div></details>")
 }
 $koHtml = "<div class='kohead'>Eliminatorias &mdash; pron&oacute;sticos del bracket</div>" + $koSb.ToString()
@@ -270,9 +292,10 @@ $html = @"
   .drow{position:relative;display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:9px;margin-top:6px;background:var(--card2);overflow:hidden}
   .barfill{position:absolute;left:0;top:0;bottom:0;background:var(--bar);z-index:0}
   .drow.hit .barfill{background:#1f5a35}
-  .drow.adv .barfill{background:#6e2233}
   .drow.mine .barfill{background:#23426e}
-  .drow.adv.mine .barfill{background:#1f6b3f}
+  .drow.bc-green .barfill{background:#1f6b3f}
+  .drow.bc-red .barfill{background:#6e2233}
+  .drow.bc-blue .barfill{background:#23426e}
   .drow>:not(.barfill){position:relative;z-index:1}
   .score{font-weight:800;font-size:16px;min-width:46px}
   .tags{display:flex;gap:5px}
@@ -329,7 +352,7 @@ $html = @"
   </div>
   $lbHtml
 </header>
-<div class='hint'>Toca un partido para ver todas las predicciones. Verde = acierto &#10003; &middot; Rojo = clasific&oacute; pero no la ten&iacute;as &middot; Azul = tu pick. Puntos y posiciones tomados en vivo del sitio oficial. Se actualiza autom&aacute;ticamente.</div>
+<div class='hint'>Toca un partido para ver todas las predicciones. En eliminatorias: Verde = la elegiste y clasific&oacute; &middot; Rojo = clasific&oacute; sin elegirla, o tu pick qued&oacute; fuera &middot; Azul = tu pick a&uacute;n en juego. Puntos y posiciones tomados en vivo del sitio oficial. Se actualiza autom&aacute;ticamente.</div>
 <main>
 <div class='grid'>
 $($sb.ToString())
