@@ -65,22 +65,6 @@ if ($end -lt 0) { throw "Could not parse the data model." }
 $model = $stream.Substring($start, $end - $start + 1) | ConvertFrom-Json
 Write-Host "Parsed model: $($model.totalPools) participants, $($model.groupCols.Count) games."
 
-# ===== TEMP DIAGNOSTIC (remove after) =====
-try {
-    $tmap = @{}; foreach ($p in $model.teams.PSObject.Properties) { $tmap[$p.Name] = $p.Value.code }
-    Write-Host "DIAG groupPlayed=$(@($model.groupCols | Where-Object { $_.played }).Count)/$($model.groupCols.Count)"
-    foreach ($k in $model.koCols) { $w = @($k.slots | Where-Object { $null -ne $_.actualWinnerId -and "$($_.actualWinnerId)" -ne '' }).Count; Write-Host "DIAG ko $($k.key) resolved=$($k.resolved) winners=$w" }
-    foreach ($sd in @('r32','r16','qf')) {
-        $vals = @{}; $byVal = @{}
-        foreach ($r in $model.rows) { $arr = $r.$sd; if ($arr) { foreach ($e in $arr) { if ($e) { $v = "$($e[1])"; if (-not $vals.ContainsKey($v)) { $vals[$v] = 0; $byVal[$v] = @{} }; $vals[$v]++; $byVal[$v]["$($e[0])"] = $true } } } }
-        Write-Host "DIAG $sd value->count: $(@($vals.GetEnumerator() | Sort-Object Name | ForEach-Object { "$($_.Name)=$($_.Value)" }) -join ' ')"
-        foreach ($v in ($byVal.Keys | Sort-Object)) { Write-Host "DIAG $sd val=$v distinctTeams=$($byVal[$v].Count): $(@($byVal[$v].Keys | ForEach-Object { $tmap[$_] } | Sort-Object) -join ',')" }
-    }
-    $mr = $model.rows | Where-Object { $_.mine } | Select-Object -First 1
-    if ($mr) { Write-Host "DIAG mine=$($mr.name) score=$($mr.score) r32: $(@($mr.r32 | ForEach-Object { if ($_) { ($tmap["$($_[0])"] + ':' + $_[1]) } }) -join ' ')" }
-} catch { Write-Host "DIAG err $($_.Exception.Message)" }
-# ===== END TEMP DIAGNOSTIC =====
-
 # ---------- 4) Generate the static dashboard ----------
 $teams = @{}; $flagData = @{}
 foreach ($p in $model.teams.PSObject.Properties) { $teams[$p.Name] = $p.Value.code }
@@ -171,44 +155,26 @@ $stages = @(
 )
 $nPlayersAll = $rows.Count
 
-# ---- Actual advancers per stage ("made it through"), from the site's own scoring ----
-# Every bracket pick is [teamId, pointsEarned]; pointsEarned > 0 means that team actually
-# reached that round (the site awards R32=1, R16=2, QF=4, SF=8 pts per correct team).
-# Aggregating pts>0 across all players gives the authoritative set of teams that advanced,
-# and it updates live as games are played. (This is the only signal that covers Ronda de 32 -
-# the koCols bracket only resolves from Octavos onward.)
-$advanced = @{}      # stage.key -> @{ "teamId" = $true }
-$advResolved = @{}   # stage.key -> $true once at least one team has advanced
+# ---- Per-team status per stage, straight from the site's bracket scoring ----
+# Each bracket pick is [teamId, status]: status 1 = the team reached that round ("clasificó"),
+# 2 = it did NOT (eliminated), 0 = still pending. This is per-team live truth (no guessing
+# whether a round is "done"), and it's the only signal that covers Ronda de 32.
+$advanced = @{}      # stage.key -> @{ teamId = $true }  (status 1)
+$eliminated = @{}    # stage.key -> @{ teamId = $true }  (status 2)
+$advResolved = @{}   # stage.key -> $true once any team has advanced
 foreach ($stk in @('r32', 'r16', 'qf', 'sf', 'final', 'champion')) {
-    $set = @{}
+    $adv = @{}; $out = @{}
     foreach ($r in $rows) {
-        if ($stk -eq 'champion') {
-            if ($r.champion -and $null -ne $r.champion[0]) {
-                $pair = $r.champion[0]
-                if ($null -ne $pair[1] -and [double]$pair[1] -gt 0) { $set["$($pair[0])"] = $true }
-            }
-        } else {
-            $arr = $r.$stk
-            if ($arr) { foreach ($e in $arr) { if ($null -ne $e -and $null -ne $e[1] -and [double]$e[1] -gt 0) { $set["$($e[0])"] = $true } } }
+        $picks = if ($stk -eq 'champion') { if ($r.champion) { @(, $r.champion[0]) } else { @() } } else { $r.$stk }
+        if (-not $picks) { continue }
+        foreach ($e in $picks) {
+            if (-not $e -or $null -eq $e[0]) { continue }
+            $sv = "$($e[1])"
+            if ($sv -eq '1') { $adv["$($e[0])"] = $true } elseif ($sv -eq '2') { $out["$($e[0])"] = $true }
         }
     }
-    $advanced[$stk] = $set
-    $advResolved[$stk] = ($set.Count -gt 0)
-}
-
-# A stage is "decided" only when its round is fully resolved - so a team I picked is shown
-# as failed (red) only once it can no longer advance, never while it's still pending.
-# r32 is decided when the group stage is over; later rounds when the site marks them resolved.
-$koResolved = @{}
-foreach ($k in $model.koCols) { $koResolved[$k.key] = [bool]$k.resolved }
-$groupDone = (@($model.groupCols | Where-Object { -not $_.played }).Count -eq 0)
-$stageDecided = @{
-    r32      = $groupDone
-    r16      = [bool]$koResolved['round_of_16']
-    qf       = [bool]$koResolved['quarter']
-    sf       = [bool]$koResolved['semi']
-    final    = [bool]$koResolved['final']
-    champion = [bool]$koResolved['champion']
+    $advanced[$stk] = $adv; $eliminated[$stk] = $out
+    $advResolved[$stk] = ($adv.Count -gt 0)
 }
 
 $koSb = New-Object System.Text.StringBuilder
@@ -224,14 +190,14 @@ foreach ($st in $stages) {
         $tid = $kv.Key; $n = $kv.Value; $pct = [math]::Round(100.0 * $n / $nPlayersAll, 1)
         $code = GetCode $tid; $fl = GetFlag $tid
         $isMine = $mineSet.ContainsKey($tid)
-        $advSet = $advanced[$st.key]
-        $isAdv  = ($advSet -and $advSet.ContainsKey($tid))
-        # Bar color (knockout): advanced+mine=green, advanced+not-mine=red, picked-but-out=red,
-        # picked-and-still-pending=blue, not-picked-not-through=default.
+        $isAdv  = $advanced[$st.key].ContainsKey($tid)
+        $isOut  = $eliminated[$st.key].ContainsKey($tid)
+        # Bar color (knockout): advanced+mine=green; advanced+not-mine=red; picked-but-out=red;
+        # picked-and-still-pending=blue; everything else=default.
         $bc = ''
         if ($isAdv -and $isMine) { $bc = ' bc-green' }
         elseif ($isAdv) { $bc = ' bc-red' }
-        elseif ($isMine -and $stageDecided[$st.key]) { $bc = ' bc-red' }
+        elseif ($isOut -and $isMine) { $bc = ' bc-red' }
         elseif ($isMine) { $bc = ' bc-blue' }
         $cls = 'drow' + $bc
         $w = [math]::Max(4.0, [double]$n / $maxc * 100)
